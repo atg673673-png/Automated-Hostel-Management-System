@@ -1,0 +1,1525 @@
+{
+  "name": "Hostel_manager_v2_with meta",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You extract hostel resident records from a warden's WhatsApp message (text or voice transcript). Messages can be phrased naturally in many ways \u2014 do not expect fixed templates. Pay special attention to room numbers: whenever the message explicitly mentions a room in forms such as 'room 101', 'Room no 101', 'room number 101', 'in room 101', or similar wording, extract the numeric room value as the room string (for example, '101'). Do not leave room null when a room number is explicitly present. For CNIC, whenever the message explicitly provides a CNIC/NIC number, extract it as a string and preserve its digits and hyphens; accept forms such as 'CNIC 35202-1234567-1' or 'NIC 3520212345671'. Do not invent or infer a CNIC. Return ONLY valid JSON, no markdown, no explanation, with exactly these fields: action (one of: new, update, vacate, query), name (string or null), cnic (string or null), room (string or null), fee (string or null), rent_status (one of: Paid, Pending, or null), contact_number (string or null), address (string or null), notes (string or null), query_type (one of: resident_lookup, unpaid_list, total_income, or null \u2014 only set when action is query), requested_field (one of: rent, rent_status, contact_number, room, address, cnic, all, or null \u2014 only set when query_type is resident_lookup). Rules: Only include a value for a field if it is clearly and explicitly mentioned in the message. Use null for anything not mentioned \u2014 never guess, assume, or invent a value, and never use the sender's own phone number as contact_number unless they explicitly stated a number in the message. For action new, name and room are the minimum needed \u2014 fee, contact_number, and address are optional, include only if explicitly mentioned. For action update, only the field(s) actually mentioned should be set to a value \u2014 every other field must be null, since null means do not change this field. name and room together identify which resident is being referenced for update or vacate; if only a name is given, still extract it as best effort. Examples: 'new student Ahmed room 101 CNIC 35202-1234567-1 rent 15000' means action new, name Ahmed, room 101, cnic 35202-1234567-1, fee 15000, everything else null. 'Add Ahmed to room 101, CNIC 35202-1234567-1, rent 15000, contact 03001234567, address Islamabad' means action new with cnic, contact_number and address also set. 'Change Ahmed's rent to 20000' means action update, name Ahmed, fee 20000, all other fields null. 'Ahmed paid rent' or 'mark Ahmed as paid' means action update, rent_status Paid, all other fields null; if a room is explicitly mentioned, extract it, e.g. 'Mark Ahmed Khan in room 101 as paid' means name Ahmed Khan, room 101, rent_status Paid. 'Update Ahmed's contact number to 03111234567' means action update, contact_number set, all other fields null. 'Zara room 9 left' means action vacate. 'tell me Ali Raza's info' means query_type resident_lookup, requested_field all. 'what's Ali Raza's rent' means query_type resident_lookup, requested_field rent. 'What is Ali Raza's CNIC?' means query_type resident_lookup, requested_field cnic. 'who hasn't paid rent' means query_type unpaid_list. 'total income' means query_type total_income.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ JSON.stringify($json.messageText).slice(1, -1) }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        576,
+        1616
+      ],
+      "id": "96a29998-3393-472b-ac21-6eb2914f125a",
+      "name": "HTTP Request2",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "aMGUmgS4ROdj0p6k",
+          "name": "Grok_Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst cleaned = raw.replace(/```json|```/g, '').trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = { action: 'unknown', name: null, cnic: null, room: null, fee: null, rent_status: null, contact_number: null, address: null, notes: 'PARSE_ERROR', query_type: null, requested_field: null };\n}\n\nfunction normalizeRoom(value) {\n  if (value === null || value === undefined || value === '') return null;\n  const text = String(value).trim();\n  const numericRoom = text.match(/\\b\\d+\\b/);\n  return numericRoom ? numericRoom[0] : text;\n}\n\nfunction normalizeName(value) {\n  if (value === null || value === undefined || value === '') return null;\n  return String(value).trim().replace(/\\s+/g, ' ');\n}\n\nparsed.name = normalizeName(parsed.name);\nparsed.cnic = parsed.cnic ? String(parsed.cnic).trim().replace(/\\D/g, '') : null;\nparsed.room = normalizeRoom(parsed.room);\nparsed.residentKey = parsed.name && parsed.room ? `${parsed.name}|${parsed.room}` : '';\n\nlet senderPhone = null;\ntry { senderPhone = $('Edit Fields2').first().json.senderPhone; } catch (e) {}\nif (!senderPhone) {\n  try { senderPhone = $('Edit Fields').first().json.senderPhone; } catch (e) {}\n}\nparsed.senderPhone = senderPhone;\n\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        1616
+      ],
+      "id": "d8d99a82-cd84-47d3-bc99-11cea1a783f8",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "new",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "415c10f0-7aa3-4fad-bf94-cdb63c0695ca"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "new"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4b7fb34f-9772-40a9-8a9a-f69be091b911",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "update",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "update"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "69354b8d-b5d8-40c8-91b2-a52f7b0b1f6f",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "vacate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "vacate"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "82e17ee2-d0e6-44c2-9372-ddb711b844ca",
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "query",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "query"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        1904
+      ],
+      "id": "965177e3-284f-4695-b03e-9d4a84b16f39",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8",
+          "mode": "list",
+          "cachedResultName": "Hostel_residents_info",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ResidentKey": "={{ $json.residentKey }}",
+            "Name": "={{ $json.name }}",
+            "CNIC": "={{ $json.cnic || \"\" }}",
+            "Room no.": "={{ $json.room }}",
+            "Contact no.": "={{ $json.contact_number }}",
+            "Room Rent": "={{ $json.fee }}",
+            "Rent Status": "={{ $json.rent_status || \"Pending\" }}",
+            "Person's Status": "Active",
+            "Last Updated": "={{ $now }}",
+            "Personal Address": "={{ $json.address || \"\" }}"
+          },
+          "matchingColumns": [
+            "Name",
+            "Room no."
+          ],
+          "schema": [
+            {
+              "id": "ResidentKey",
+              "displayName": "ResidentKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CNIC",
+              "displayName": "CNIC",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Room no.",
+              "displayName": "Room no.",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Contact no.",
+              "displayName": "Contact no.",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Room Rent",
+              "displayName": "Room Rent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Rent Status",
+              "displayName": "Rent Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Personal Address",
+              "displayName": "Personal Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Person's Status",
+              "displayName": "Person's Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Updated",
+              "displayName": "Last Updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1200,
+        1520
+      ],
+      "id": "e7a03098-854c-4368-8c8d-ae46f128b21a",
+      "name": "Append or update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5t6Nv8xpJEDoyE5D",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v20.0/1260732410446738/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.senderPhone }}\",\n  \"text\": { \"body\": {{ JSON.stringify($json.replyMessage) }} }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2272,
+        1616
+      ],
+      "id": "f54b7c31-2d1d-4803-8a94-9cc6dd61b233",
+      "name": "HTTP Request3",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "ucxm50v9okLEtlRf",
+          "name": "Unnamed credential 2"
+        },
+        "httpHeaderAuth": {
+          "id": "Fod0bgTyFtm7xp0h",
+          "name": "Meta_token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Code in JavaScript').item.json;\nlet msg;\nif (c.action === 'new') {\n  const feeText = c.fee ? `, Rs ${c.fee}/mo` : '';\n  msg = `\u2705 Added: ${c.name}, Room ${c.room}${feeText}${c.cnic ? `, CNIC ${c.cnic}` : ''}`;\n} else if (c.action === 'update') {\n  msg = `\u2705 Updated: ${c.name}, Room ${c.room}`;\n} else if (c.action === 'vacate') {\n  msg = `\ud83d\udeaa Marked vacated: ${c.name}, Room ${c.room}`;\n} else {\n  msg = 'Saved.';\n}\nreturn [{ json: { replyMessage: msg, senderPhone: c.senderPhone } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        1600
+      ],
+      "id": "adcf80a6-2593-427f-a2b7-2867001b0a52",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "path": "hostel-manager",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -400,
+        992
+      ],
+      "id": "2393fdb8-eb68-46b0-a099-026ec010a54a",
+      "name": "Webhook1",
+      "webhookId": "dd8a75eb-2c69-4025-b03d-f292b7c0d425"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "dcd0ce31-0362-4ff7-a40c-f68b5facef6d",
+              "leftValue": "={{ $json.query['hub.verify_token'] }}",
+              "rightValue": "hostel-verify-2026",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -192,
+        992
+      ],
+      "id": "0c2380e3-cb27-458d-b3e3-6ef8299e38c8",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        880
+      ],
+      "id": "635dcd54-ed70-48e4-95d4-e25cc1eea3b5",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Error :  403",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        1104
+      ],
+      "id": "5e07f33c-e3de-4408-a4eb-534a8d27867d",
+      "name": "Respond to Webhook1"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "=hostel-manager",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -688,
+        1392
+      ],
+      "id": "731b9614-f4fc-4bca-aef6-7db053e4c057",
+      "name": "Webhook2",
+      "webhookId": "08fb49f5-a083-4d43-a9ce-3822c2e1c6ed"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2d592667-231c-4504-abda-1282e35d72cb",
+              "leftValue": "={{ $json.body.entry[0].changes[0].value.messages[0].type }}",
+              "rightValue": "audio",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -48,
+        1376
+      ],
+      "id": "9f289e67-093a-457e-9eae-018a1fa2cf07",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c9514b2c-f6a5-47ce-9b48-00049c220fdf",
+              "name": "messageText",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].text.body }}",
+              "type": "string"
+            },
+            {
+              "id": "sender-phone-text",
+              "name": "senderPhone",
+              "value": "={{ $json.body.entry[0].changes[0].value.messages[0].from }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        1488
+      ],
+      "id": "c55050a3-b906-4093-8d5c-308c2d9a70e3",
+      "name": "Edit Fields2"
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/v20.0/{{ $json.body.entry[0].changes[0].value.messages[0].audio.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        1296
+      ],
+      "id": "a6d265a6-b636-47ee-9d93-03b84c7aead9",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Fod0bgTyFtm7xp0h",
+          "name": "Meta_token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        448,
+        1296
+      ],
+      "id": "b185b5a4-205a-4f85-a051-1d3a10a4f19a",
+      "name": "HTTP Request1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Fod0bgTyFtm7xp0h",
+          "name": "Meta_token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/audio/transcriptions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "model",
+              "value": "whisper-large-v3-turbo"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        656,
+        1296
+      ],
+      "id": "4f813cdd-5a3f-4773-aaf4-9b2b4dd87dec",
+      "name": "HTTP Request4",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "aMGUmgS4ROdj0p6k",
+          "name": "Grok_Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "92a034eb-ff81-4925-a4d1-c48dda85985d",
+              "name": "messageText",
+              "value": "= {{ $json.text }}",
+              "type": "string"
+            },
+            {
+              "id": "sender-phone-voice",
+              "name": "senderPhone",
+              "value": "={{ $('Webhook2').first().json.body.entry[0].changes[0].value.messages[0].from }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        864,
+        1296
+      ],
+      "id": "a130faba-9083-4f9d-a66b-99579a1632eb",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8",
+          "mode": "list",
+          "cachedResultName": "Hostel_residents_info",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Name",
+              "lookupValue": "={{ $json.name }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1296,
+        1920
+      ],
+      "id": "e6824aba-97cd-4c9b-babb-f4c5b740cac9",
+      "name": "Get Resident Row",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5t6Nv8xpJEDoyE5D",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const extracted = $('Code in JavaScript').item.json;\nconst rows = $input.all();\n\nfunction normalizeRoom(value) {\n  if (value === null || value === undefined || value === '') return null;\n  const text = String(value).trim();\n  const numericRoom = text.match(/\\b\\d+\\b/);\n  return numericRoom ? numericRoom[0] : text;\n}\n\nfunction normalizeName(value) {\n  if (value === null || value === undefined || value === '') return null;\n  return String(value).trim().replace(/\\s+/g, ' ').toLowerCase();\n}\n\nconst targetName = normalizeName(extracted.name);\nconst targetRoom = normalizeRoom(extracted.room);\n\n// Get Resident Row searches by name. Here we select the row whose room matches\n// after normalization, so values like \"Room 102\" or the typo \"Rome 102\"\n// still match an incoming room value of \"102\".\nconst existing = rows\n  .map(item => item.json)\n  .find(row => normalizeName(row['Name']) === targetName && normalizeRoom(row['Room no.']) === targetRoom);\n\nif (!existing) {\n  return [{ json: { notFound: true, name: extracted.name, room: extracted.room, action: extracted.action, senderPhone: extracted.senderPhone } }];\n}\n\nfunction pick(newVal, oldVal, fallback) {\n  if (newVal !== null && newVal !== undefined && newVal !== '') return newVal;\n  if (oldVal !== undefined && oldVal !== null && oldVal !== '') return oldVal;\n  return fallback;\n}\n\nconst canonicalName = pick(extracted.name, existing['Name'], extracted.name);\nconst canonicalRoom = normalizeRoom(pick(extracted.room, existing['Room no.'], extracted.room));\n\nconst merged = {\n  notFound: false,\n  senderPhone: extracted.senderPhone,\n  // Always write the canonical key so a legacy/malformed ResidentKey is repaired.\n  residentKey: canonicalName && canonicalRoom ? `${canonicalName}|${canonicalRoom}` : extracted.residentKey,\n  name: canonicalName,\n  room: canonicalRoom,\n  cnic: pick(extracted.cnic, existing['CNIC'], ''),\n  contact_number: pick(extracted.contact_number, existing['Contact no.'], ''),\n  fee: pick(extracted.fee, existing['Room Rent'], ''),\n  rent_status: pick(extracted.rent_status, existing['Rent Status'], 'Pending'),\n  address: pick(extracted.address, existing['Personal Address'], ''),\n  personStatus: existing[\"Person's Status\"] || 'Active'\n};\n\nif (extracted.action === 'vacate') {\n  merged.personStatus = 'Vacated';\n}\n\nreturn [{ json: merged }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        1840
+      ],
+      "id": "27113c2e-ba42-4048-ae30-007d8c5abaa5",
+      "name": "Merge Fields"
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8",
+          "mode": "list",
+          "cachedResultName": "Hostel_residents_info",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ResidentKey": "={{ $json.residentKey }}",
+            "Name": "={{ $json.name }}",
+            "CNIC": "={{ $json.cnic || \"\" }}",
+            "Room no.": "={{ $json.room }}",
+            "Contact no.": "={{ $json.contact_number }}",
+            "Room Rent": "={{ $json.fee }}",
+            "Rent Status": "={{ $json.rent_status }}",
+            "Personal Address": "={{ $json.address }}",
+            "Person's Status": "={{ $json.personStatus }}",
+            "Last Updated": "={{ $now }}"
+          },
+          "matchingColumns": [
+            "Name",
+            "Room no."
+          ],
+          "schema": [
+            {
+              "id": "ResidentKey",
+              "displayName": "ResidentKey",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "CNIC",
+              "displayName": "CNIC",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Room no.",
+              "displayName": "Room no.",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Contact no.",
+              "displayName": "Contact no.",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Room Rent",
+              "displayName": "Room Rent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Rent Status",
+              "displayName": "Rent Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Personal Address",
+              "displayName": "Personal Address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Person's Status",
+              "displayName": "Person's Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Last Updated",
+              "displayName": "Last Updated",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1664,
+        1840
+      ],
+      "id": "a0b64125-bc7e-4a78-9a8e-0f396372df52",
+      "name": "Write Resident Row",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5t6Nv8xpJEDoyE5D",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\nlet error = null;\nconst validActions = ['new', 'update', 'vacate', 'query'];\nconst validQueryTypes = ['resident_lookup', 'unpaid_list', 'total_income'];\n\nif (p.notes === 'PARSE_ERROR' || !validActions.includes(p.action)) {\n  error = \"Sorry, I couldn't understand that message. Try something like:\\n\u2022 'new student Ahmed room 101 rent 15000'\\n\u2022 'update Ahmed room 101 rent to 15000'\\n\u2022 'Ahmed room 101 left'\";\n} else if (p.action === 'new' && (!p.name || !p.room)) {\n  error = \"To add a new resident I need both a name and room number, e.g. 'new student Ahmed room 101 rent 15000'.\";\n} else if (p.cnic && !/^\\d{13}$/.test(String(p.cnic))) {\n  error = \"The CNIC should contain 13 digits. You can send it with or without dashes, for example 35202-1234567-1.\";\n} else if ((p.action === 'update' || p.action === 'vacate') && (!p.name || !p.room)) {\n  const missing = [];\n  if (!p.name) missing.push('name');\n  if (!p.room) missing.push('room number');\n  error = `I need the resident's ${missing.join(' and ')} to do that. Try: 'update Ahmed room 101 rent to 15000'.`;\n} else if (p.action === 'query') {\n  if (!validQueryTypes.includes(p.query_type)) {\n    error = \"I couldn't identify the lookup or report you want. Try: 'What room is Ahmed Khan in?', 'Who hasn't paid rent?', or 'What is the total rent income?'\";\n  } else if (p.query_type === 'resident_lookup' && !p.name) {\n    error = \"I need the resident's name for that lookup. Try: 'What room is Ahmed Khan in?'\";\n  }\n}\n\nreturn [{ json: { ...p, validationError: error } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        1488
+      ],
+      "id": "7c404a57-e9d7-432d-aeff-e58fd61f816b",
+      "name": "Validate Message"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "has-error-1",
+              "leftValue": "={{ $json.validationError ? 'true' : 'false' }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1360,
+        1024
+      ],
+      "id": "11bf0d84-dd20-4f03-8133-81b9bd625d20",
+      "name": "Has Validation Error?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $input.first().json;\nreturn [{ json: { replyMessage: c.validationError, senderPhone: c.senderPhone } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        1344
+      ],
+      "id": "b9cb73f9-6147-485a-9ef0-45d2f3799764",
+      "name": "Validation Error Reply"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "found-check-1",
+              "leftValue": "={{ $json.notFound ? 'true' : 'false' }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1664,
+        1840
+      ],
+      "id": "81878966-ebf8-40e5-b8a2-450c65563f26",
+      "name": "Resident Found?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $input.first().json;\nconst msg = `\u26a0\ufe0f I couldn't find a resident named \"${c.name || '?'}\" in room ${c.room || '?'}. If this is a new resident, try: 'new student ${c.name || 'Name'} room ${c.room || '101'} rent 15000'. If they should already exist, please double check the spelling of the name and room.`;\nreturn [{ json: { replyMessage: msg, senderPhone: c.senderPhone } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        1904
+      ],
+      "id": "9601b2b7-aaea-4cd8-8890-57794ff0fb2f",
+      "name": "Resident Not Found Reply"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5af85854-74f9-4ac5-825b-1edad9f96392",
+              "leftValue": "=   {{ !!$json.body.entry[0].changes[0].value.messages }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -416,
+        1392
+      ],
+      "id": "d9d1da12-9f67-4158-a1d4-f885a3c42f89",
+      "name": "Has Message"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        1632
+      ],
+      "id": "ba0dc393-2131-42b9-b0b2-59dc4f1a8165",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8",
+          "mode": "list",
+          "cachedResultName": "Hostel_residents_info",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1168,
+        2192
+      ],
+      "id": "3ba182e8-71f3-4f95-afb8-d1542b2dc51d",
+      "name": "Query - Get All Residents",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5t6Nv8xpJEDoyE5D",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $('Code in JavaScript').item.json;\nconst rows = $input.all().map(item => item.json || {});\n\nfunction norm(value) {\n  return String(value ?? '').trim().replace(/\\s+/g, ' ').toLowerCase();\n}\n\nfunction room(value) {\n  const text = String(value ?? '').trim();\n  const m = text.match(/\\b\\d+\\b/);\n  return m ? m[0] : text;\n}\n\nfunction money(value) {\n  const n = Number(String(value ?? '').replace(/[^0-9.\\-]/g, ''));\n  return Number.isFinite(n) ? n : 0;\n}\n\nconst activeRows = rows.filter(r => norm(r[\"Person's Status\"]) !== 'vacated');\nlet reply;\n\nif (query.query_type === 'resident_lookup') {\n  const target = norm(query.name);\n  const matches = rows.filter(r => norm(r['Name']) === target);\n\n  if (!matches.length) {\n    reply = `\u26a0\ufe0f I couldn't find a resident named \"${query.name || '?'}\" in the hostel records.`;\n  } else if (matches.length > 1) {\n    const list = matches.map(r => {\n      const n = r['Name'] || query.name;\n      const rm = room(r['Room no.']) || '?';\n      const cnic = r['CNIC'] || '?';\n      const rent = r['Room Rent'] || '?';\n      const status = r['Rent Status'] || '?';\n      return `${n} \u2014 Room ${rm}, CNIC ${cnic}, Rent Rs ${rent}, Status ${status}`;\n    }).join('\\n');\n    reply = `I found multiple records for ${query.name}:\\n${list}\\nPlease include the room number if you want a specific record.`;\n  } else {\n    const r = matches[0];\n    const requested = query.requested_field || 'all';\n    const name = r['Name'] || query.name;\n    const rm = room(r['Room no.']) || '?';\n\n    if (requested === 'room') {\n      reply = `${name} is in Room ${rm}.`;\n    } else if (requested === 'rent') {\n      reply = `${name}'s rent is Rs ${r['Room Rent'] || 0}/month.`;\n    } else if (requested === 'rent_status') {\n      reply = `${name}'s rent status is ${r['Rent Status'] || 'Unknown'}.`;\n    } else if (requested === 'contact_number') {\n      reply = `${name}'s contact number is ${r['Contact no.'] || 'not recorded'}.`;\n    } else if (requested === 'address') {\n      reply = `${name}'s address is ${r['Personal Address'] || 'not recorded'}.`;\n    } else if (requested === 'cnic') {\n      reply = `${name}'s CNIC is ${r['CNIC'] || 'not recorded'}.`;\n    } else {\n      reply = `\ud83d\udccb ${name}\\nRoom: ${rm}\\nCNIC: ${r['CNIC'] || 'not recorded'}\\nRent: Rs ${r['Room Rent'] || 0}/month\\nRent status: ${r['Rent Status'] || 'Unknown'}\\nContact: ${r['Contact no.'] || 'not recorded'}\\nAddress: ${r['Personal Address'] || 'not recorded'}\\nStatus: ${r[\"Person's Status\"] || 'Active'}`;\n    }\n  }\n} else if (query.query_type === 'unpaid_list') {\n  const unpaid = activeRows.filter(r => norm(r['Rent Status']) !== 'paid');\n  if (!unpaid.length) {\n    reply = '\u2705 All active residents have paid their rent.';\n  } else {\n    const lines = unpaid.map((r, i) => `${i + 1}. ${r['Name'] || 'Unknown'} \u2014 Room ${room(r['Room no.']) || '?'} \u2014 Rs ${r['Room Rent'] || 0}`);\n    reply = `\ud83d\udcb0 Residents with unpaid/pending rent (${unpaid.length}):\\n${lines.join('\\n')}`;\n  }\n} else if (query.query_type === 'total_income') {\n  const total = activeRows.reduce((sum, r) => sum + money(r['Room Rent']), 0);\n  reply = `\ud83d\udcb0 Total monthly rent income from active residents: Rs ${total.toLocaleString('en-PK')}.`;\n} else {\n  reply = \"I couldn't determine which report you want.\";\n}\n\nreturn [{ json: { replyMessage: reply, senderPhone: query.senderPhone } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        2192
+      ],
+      "id": "fc757093-69b7-4d9c-9214-2ed2b539192c",
+      "name": "Process Query"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8",
+          "mode": "list",
+          "cachedResultName": "Hostel_residents_info",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/176C_192oMaQMlTKojPr8TFHStR6SDk-XfdawC8enWA8/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1168,
+        1504
+      ],
+      "id": "cb2393ec-e488-4871-b281-1533e48c2d76",
+      "name": "New Resident - Get All Rows",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "5t6Nv8xpJEDoyE5D",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const incoming = $('Code in JavaScript').item.json;\nconst rows = $input.all().map(i => i.json);\nfunction norm(value) { return value === null || value === undefined ? '' : String(value).trim().toLowerCase(); }\nfunction room(value) { const text = norm(value); const m = text.match(/\\b\\d+\\b/); return m ? m[0] : text; }\nfunction isActive(value) { const s = norm(value); return s === '' || ['active','occupied','current'].includes(s); }\nconst targetRoom = room(incoming.room);\nconst targetCnic = norm(incoming.cnic);\nconst activeRoomConflict = rows.find(r => room(r['Room no.']) === targetRoom && isActive(r[\"Person's Status\"]));\nconst cnicConflict = targetCnic ? rows.find(r => norm(r['CNIC']) === targetCnic) : null;\nlet conflictType = null, conflictRow = null;\nif (activeRoomConflict) { conflictType = 'room'; conflictRow = activeRoomConflict; } else if (cnicConflict) { conflictType = 'cnic'; conflictRow = cnicConflict; }\nreturn [{ json: { ...incoming, canCreate: !conflictType, conflictType, conflictName: conflictRow ? (conflictRow['Name'] || '') : '', conflictRoom: conflictRow ? (conflictRow['Room no.'] || '') : '', conflictCnic: conflictRow ? (conflictRow['CNIC'] || '') : '' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "id": "a468cc31-d637-4c9e-9051-9f905d6ffeb0",
+      "name": "Check New Resident",
+      "position": [
+        1360,
+        1504
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "2cbde15a-fd01-41f1-91fe-a3c2a12fe7e1",
+              "leftValue": "={{ $json.canCreate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "id": "b08d9833-6788-4d2f-a11a-6f6e10096202",
+      "name": "New Resident Allowed?",
+      "position": [
+        1552,
+        1504
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $input.first().json;\nlet msg;\nif (c.conflictType === 'room') msg = `\u26a0\ufe0f Room ${c.room} is already occupied by ${c.conflictName || 'another resident'}. I did not add ${c.name}. Please choose an available room.`;\nelse if (c.conflictType === 'cnic') msg = `\u26a0\ufe0f This CNIC is already registered${c.conflictName ? ` to ${c.conflictName}` : ''}${c.conflictRoom ? ` in room ${c.conflictRoom}` : ''}. I did not create a duplicate resident.`;\nelse msg = '\u26a0\ufe0f I could not add the resident because the request conflicts with existing resident data.';\nreturn [{ json: { replyMessage: msg, senderPhone: c.senderPhone } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "id": "5e38a7af-8203-4f32-91c6-f21c714940bf",
+      "name": "New Resident Conflict Reply",
+      "position": [
+        1744,
+        1600
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Validate Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "New Resident - Get All Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Resident Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Resident Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Query - Get All Residents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append or update row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook2": {
+      "main": [
+        [
+          {
+            "node": "Has Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Edit Fields2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Resident Row": {
+      "main": [
+        [
+          {
+            "node": "Merge Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Fields": {
+      "main": [
+        [
+          {
+            "node": "Resident Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Resident Row": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Message": {
+      "main": [
+        [
+          {
+            "node": "Has Validation Error?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Validation Error?": {
+      "main": [
+        [
+          {
+            "node": "Validation Error Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validation Error Reply": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resident Found?": {
+      "main": [
+        [
+          {
+            "node": "Resident Not Found Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Write Resident Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resident Not Found Reply": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Message": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query - Get All Residents": {
+      "main": [
+        [
+          {
+            "node": "Process Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Query": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Resident - Get All Rows": {
+      "main": [
+        [
+          {
+            "node": "Check New Resident",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check New Resident": {
+      "main": [
+        [
+          {
+            "node": "New Resident Allowed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Resident Allowed?": {
+      "main": [
+        [
+          {
+            "node": "Append or update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "New Resident Conflict Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Resident Conflict Reply": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "456120a3-efcf-4a8a-ac7f-b15c64dae9a7",
+  "meta": {
+    "instanceId": "3d1ab68caaecddc00870d7c84e1eb5a9f8e481132996e2ac799c4a83a5c42263"
+  },
+  "nodeGroups": [],
+  "id": "MhAVYEj5rQNnEpp5",
+  "tags": []
+}
