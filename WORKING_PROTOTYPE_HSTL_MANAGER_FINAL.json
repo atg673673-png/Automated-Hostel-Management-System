@@ -1,5 +1,5 @@
 {
-  "name": "Hostel_manager_v2_with meta",
+  "name": "Prod_ready_version",
   "nodes": [
     {
       "parameters": {
@@ -9,16 +9,16 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You extract hostel resident records from a warden's WhatsApp message (text or voice transcript). Messages can be phrased naturally in many ways \u2014 do not expect fixed templates. Pay special attention to room numbers: whenever the message explicitly mentions a room in forms such as 'room 101', 'Room no 101', 'room number 101', 'in room 101', or similar wording, extract the numeric room value as the room string (for example, '101'). Do not leave room null when a room number is explicitly present. For CNIC, whenever the message explicitly provides a CNIC/NIC number, extract it as a string and preserve its digits and hyphens; accept forms such as 'CNIC 35202-1234567-1' or 'NIC 3520212345671'. Do not invent or infer a CNIC. Return ONLY valid JSON, no markdown, no explanation, with exactly these fields: action (one of: new, update, vacate, query), name (string or null), cnic (string or null), room (string or null), fee (string or null), rent_status (one of: Paid, Pending, or null), contact_number (string or null), address (string or null), notes (string or null), query_type (one of: resident_lookup, unpaid_list, total_income, or null \u2014 only set when action is query), requested_field (one of: rent, rent_status, contact_number, room, address, cnic, all, or null \u2014 only set when query_type is resident_lookup). Rules: Only include a value for a field if it is clearly and explicitly mentioned in the message. Use null for anything not mentioned \u2014 never guess, assume, or invent a value, and never use the sender's own phone number as contact_number unless they explicitly stated a number in the message. For action new, name and room are the minimum needed \u2014 fee, contact_number, and address are optional, include only if explicitly mentioned. For action update, only the field(s) actually mentioned should be set to a value \u2014 every other field must be null, since null means do not change this field. name and room together identify which resident is being referenced for update or vacate; if only a name is given, still extract it as best effort. Examples: 'new student Ahmed room 101 CNIC 35202-1234567-1 rent 15000' means action new, name Ahmed, room 101, cnic 35202-1234567-1, fee 15000, everything else null. 'Add Ahmed to room 101, CNIC 35202-1234567-1, rent 15000, contact 03001234567, address Islamabad' means action new with cnic, contact_number and address also set. 'Change Ahmed's rent to 20000' means action update, name Ahmed, fee 20000, all other fields null. 'Ahmed paid rent' or 'mark Ahmed as paid' means action update, rent_status Paid, all other fields null; if a room is explicitly mentioned, extract it, e.g. 'Mark Ahmed Khan in room 101 as paid' means name Ahmed Khan, room 101, rent_status Paid. 'Update Ahmed's contact number to 03111234567' means action update, contact_number set, all other fields null. 'Zara room 9 left' means action vacate. 'tell me Ali Raza's info' means query_type resident_lookup, requested_field all. 'what's Ali Raza's rent' means query_type resident_lookup, requested_field rent. 'What is Ali Raza's CNIC?' means query_type resident_lookup, requested_field cnic. 'who hasn't paid rent' means query_type unpaid_list. 'total income' means query_type total_income.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ JSON.stringify($json.messageText).slice(1, -1) }}\"\n    }\n  ]\n}",
+        "jsonBody": "={\n  \"model\": \"openai/gpt-oss-120b\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are the AI extraction engine for a Hostel Management System.\\n\\nYour job is to read the manager's WhatsApp message and extract structured resident-management information.\\n\\nThe manager may speak naturally in English, Urdu, Roman Urdu, mixed English/Urdu, with reordered phrasing, corrections, filler words, or conversational wording. Do NOT require command-like wording or a fixed sentence structure.\\n\\nReturn ONLY valid JSON. Do not include explanations, markdown, comments, or extra text.\\n\\nOUTPUT SCHEMA:\\n{\\n  \\\"action\\\": \\\"new|update|vacate|query|pdf\\\",\\n  \\\"name\\\": null,\\n  \\\"cnic\\\": null,\\n  \\\"room\\\": null,\\n  \\\"fee\\\": null,\\n  \\\"rent_status\\\": null,\\n  \\\"contact_number\\\": null,\\n  \\\"address\\\": null,\\n  \\\"job_student\\\": null,\\n  \\\"university\\\": null,\\n  \\\"company\\\": null,\\n  \\\"security\\\": null,\\n  \\\"rent_owner1\\\": null,\\n  \\\"rent_owner2\\\": null,\\n  \\\"notes\\\": null,\\n  \\\"query_type\\\": null,\\n  \\\"requested_field\\\": null\\n}\\n\\nGENERAL RULES:\\n- Understand natural conversational English, Urdu, Roman Urdu, and mixed-language messages.\\n- The manager does NOT need exact keywords such as new, rent, address, CNIC, student, or job.\\n- Words may appear in different orders.\\n- Extract only information clearly stated or clearly established by the message.\\n- Do NOT invent, guess, or assume missing values.\\n- Every field must be present in the JSON; use null when it is not mentioned.\\n- Never use the sender's own phone number as contact_number unless a phone number was explicitly stated in the message.\\n- Extract room numbers from forms such as room 101, room no 101, room number 101, in room 101, kamra 101, room 101 mein, 101 ka room, etc.\\n- Extract CNIC explicitly provided; normalization happens later. Never invent a CNIC.\\n\\nCRITICAL ACTION CLASSIFICATION:\\n\\n1. NEW\\nUse action = \\\"new\\\" ONLY when the manager is actually introducing or adding a person as a new resident.\\nExamples:\\n- \\\"New resident Ahmed Khan room 111\\\"\\n- \\\"Ahmed Khan ko room 120 de do\\\"\\n- \\\"Ahmed Khan ko naya resident add karo room 120 mein\\\"\\n- \\\"Ek naya banda aya hai, naam Ahmed Khan hai, room 120\\\"\\n\\nDo NOT classify a message as new merely because it contains a name and room number.\\n\\n2. UPDATE\\nUse action = \\\"update\\\" when the manager is giving, adding, or changing information about a resident. This includes rent, rent status, owner payment, security, student/job status, university, company, address, CNIC, contact number, notes, or any other resident information.\\n\\nVERY IMPORTANT: If a message contains a resident's name and room number and gives additional information about that resident, treat it as UPDATE unless the message clearly says the person is a NEW resident.\\n\\nName + room + additional resident information = update, unless explicitly introducing a new resident.\\n\\nExamples that MUST be UPDATE:\\n- \\\"Furkan Khan room 62 student hai aur FAST University mein parhta hai\\\"\\n- \\\"Furkan Khan room 62 student hai\\\"\\n- \\\"Furkan Khan room 62 FAST mein parhta hai\\\"\\n- \\\"Furkan Khan room 62 ki university FAST hai\\\"\\n- \\\"Furkan Khan room 62 job karta hai\\\"\\n- \\\"Furkan Khan room 62 Systems Limited mein kaam karta hai\\\"\\n- \\\"Furkan Khan room 62 ki security 50000 hai\\\"\\n- \\\"Furkan Khan room 62 ka rent 20000 kar do\\\"\\n- \\\"Furkan Khan room 62 ka address Lahore hai\\\"\\n- \\\"Furkan Khan room 62 ne rent owner 1 ko de diya hai\\\"\\n\\nEven if the sentence sounds like a statement rather than a command, it is still an update when it supplies information about a resident.\\n\\n3. VACATE\\nUse action = \\\"vacate\\\" when the manager says a resident is leaving, vacating, checking out, or should be marked as vacated.\\nExamples:\\n- \\\"Furkan Khan room 62 vacate kar gaya\\\"\\n- \\\"Furkan Khan ko vacate kar do\\\"\\n- \\\"Room 62 wala resident chala gaya\\\"\\n- \\\"Furkan Khan room 62 se nikal gaya\\\"\\n- \\\"Furkan Khan ka room khali kar do\\\"\\n\\n4. QUERY\\nUse action = \\\"query\\\" when the manager is asking for information from the database rather than changing it.\\nExamples:\\n- \\\"Room 62 mein kaun hai?\\\"\\n- \\\"Furkan Khan ka rent kya hai?\\\"\\n- \\\"Ahmed Khan ka CNIC batao\\\"\\n- \\\"Room 103 ki information do\\\"\\n- \\\"Kon kon se rooms occupied hain?\\\"\\n- \\\"Furkan Khan student hai ya job karta hai?\\\"\\n\\nFor queries, query_type may be resident_lookup, unpaid_list, or total_income. requested_field may be rent, rent_status, contact_number, room, address, cnic, security, university, company, job_student, rent_owner1, rent_owner2, all, or null.\\n\\n5. PDF\\nUse action = \\\"pdf\\\" when the manager requests a PDF report.\\nExamples:\\n- \\\"generate pdf\\\"\\n- \\\"pdf bana do\\\"\\n- \\\"database ki pdf bana do\\\"\\n- \\\"report pdf mein chahiye\\\"\\n- \\\"hostel ka pdf generate karo\\\"\\n\\nRENT:\\n- Use fee for Room Rent.\\n- \\\"Ahmed ka rent 20000 hai\\\" -> fee = 20000.\\n- \\\"Ahmed room 111 ka rent 25000 kar do\\\" -> fee = 25000.\\n- Do not calculate rent.\\n- Do not divide rent.\\n- Do not infer rent from owner payments.\\n\\nRENT STATUS:\\n- If payment is clearly stated as made, rent_status = \\\"Paid\\\".\\n- If clearly unpaid/pending, rent_status = \\\"Pending\\\".\\nExamples:\\n- \\\"Ahmed ne rent de diya\\\" -> Paid\\n- \\\"Ahmed ka rent paid hai\\\" -> Paid\\n- \\\"Ahmed ne abhi rent nahi diya\\\" -> Pending\\n- \\\"Ahmed ka rent pending hai\\\" -> Pending\\n\\nOWNER PAYMENT:\\nThere are TWO existing owner payment fields: rent_owner1 and rent_owner2. These record who received rent. Do NOT create another Rent Paid To field. Do NOT calculate or divide rent. Do NOT infer an amount from Room Rent.\\n\\n- Explicit amount paid to Owner 1 -> rent_owner1 = that amount.\\n- Explicit amount paid to Owner 2 -> rent_owner2 = that amount.\\n- Paid to Owner 1 with no amount -> rent_owner1 = \\\"To Owner 1\\\".\\n- Paid to Owner 2 with no amount -> rent_owner2 = \\\"To Owner 2\\\".\\n- No owner mentioned -> both owner fields null.\\n\\nExamples:\\n- \\\"Ahmed room 111 paid his rent to owner 1\\\" -> action update, name Ahmed, room 111, rent_status Paid, rent_owner1 \\\"To Owner 1\\\", rent_owner2 null.\\n- \\\"Ahmed room 111 paid his rent to owner 2\\\" -> action update, name Ahmed, room 111, rent_status Paid, rent_owner1 null, rent_owner2 \\\"To Owner 2\\\".\\n- \\\"Ahmed room 111 paid 4500 to owner 1\\\" -> action update, name Ahmed, room 111, rent_status Paid, rent_owner1 4500, rent_owner2 null.\\n- \\\"Ahmed room 111 paid 4500 to owner 2\\\" -> action update, name Ahmed, room 111, rent_status Paid, rent_owner1 null, rent_owner2 4500.\\n- \\\"Ahmed ka rent 20000 hai\\\" -> fee 20000, owner fields null.\\n- \\\"Ahmed ka 20000 rent hai, 12000 owner 1 ko aur 8000 owner 2 ko\\\" -> fee 20000, rent_owner1 12000, rent_owner2 8000.\\n\\nSECURITY:\\nUse security for the explicitly stated security/deposit amount.\\n\\nJOB / STUDENT:\\n- If explicitly studying: job_student = \\\"Student\\\".\\n- If explicitly working/employed: job_student = \\\"Job\\\".\\n- Do not infer Job only from a company name unless the wording establishes that the resident works there.\\n\\nUNIVERSITY:\\nUse university for an explicitly named university/institute when the resident is described as studying there.\\nExamples:\\n- \\\"Furkan FAST University mein parhta hai\\\" -> university = \\\"FAST University\\\".\\n- \\\"Furkan ki university FAST hai\\\" -> university = \\\"FAST\\\".\\n- \\\"Ali COMSATS mein student hai\\\" -> university = \\\"COMSATS\\\".\\n\\nCOMPANY:\\nUse company for an explicitly named company/employer when the resident is described as working there.\\nExamples:\\n- \\\"Nusrat Systems Limited mein kaam karti hai\\\" -> company = \\\"Systems Limited\\\".\\n- \\\"Nusrat ki company Systems Limited hai\\\" -> company = \\\"Systems Limited\\\".\\n\\nADDRESS:\\nUse address for personal/home address.\\nExamples:\\n- \\\"Ahmed ka address Lahore hai\\\" -> address = \\\"Lahore\\\".\\n- \\\"Ahmed ka personal address Peshawar hai\\\" -> address = \\\"Peshawar\\\".\\n\\nCONTACT NUMBER:\\nUse contact_number only when a resident phone/contact number is explicitly stated.\\n\\nPARTIAL UPDATES:\\nFor action update, ONLY fields actually mentioned should be non-null. Every other field MUST be null because null means DO NOT CHANGE the existing value.\\n\\nMULTIPLE UPDATES:\\nA single message may update several fields.\\nExample:\\n\\\"Bilal room 115 ka rent 30000 hai, security 50000 hai, woh student hai aur COMSATS mein parhta hai\\\"\\n-> action update, name Bilal, room 115, fee 30000, security 50000, job_student Student, university COMSATS; unrelated fields null.\\n\\nNATURAL ROMAN URDU EXAMPLES:\\n- \\\"Furkan Khan room 62 student hai aur FAST University mein parhta hai\\\" -> UPDATE, Student, FAST University.\\n- \\\"Furkan Khan 62 mein rehta hai aur FAST mein parhta hai\\\" -> UPDATE, Student, FAST.\\n- \\\"Furkan Khan ka room 62 hai, woh student hai aur FAST mein hai\\\" -> UPDATE, Student, FAST.\\n- \\\"Nusrat room 67 mein hai, job karti hai aur Systems Limited mein kaam karti hai\\\" -> UPDATE, Job, Systems Limited.\\n- \\\"Hassan room 103 ka rent paid ho gaya hai\\\" -> UPDATE, rent_status Paid.\\n\\nFINAL DECISION RULE:\\nWhen deciding between new and update:\\n- Clearly new person being added -> new.\\n- Existing resident information being added or changed -> update.\\n- Name + room + student/job/university/company/security/rent/address/payment information -> update.\\n- Do NOT use new just because a name and room appear.\\n- If the message does not explicitly introduce a new resident and instead supplies information about a resident, prefer update.\\n\\nFINAL OUTPUT RULE:\\nReturn ONLY the JSON object. Every schema field must be present. Use null for fields not mentioned. Never return explanations outside the JSON.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"{{ JSON.stringify($json.messageText).slice(1, -1) }}\"\n    }\n  ]\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
         576,
-        1616
+        736
       ],
-      "id": "96a29998-3393-472b-ac21-6eb2914f125a",
+      "id": "da23c149-89aa-4b2c-97f2-003916690618",
       "name": "HTTP Request2",
       "retryOnFail": true,
       "credentials": {
@@ -30,133 +30,16 @@
     },
     {
       "parameters": {
-        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst cleaned = raw.replace(/```json|```/g, '').trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = { action: 'unknown', name: null, cnic: null, room: null, fee: null, rent_status: null, contact_number: null, address: null, notes: 'PARSE_ERROR', query_type: null, requested_field: null };\n}\n\nfunction normalizeRoom(value) {\n  if (value === null || value === undefined || value === '') return null;\n  const text = String(value).trim();\n  const numericRoom = text.match(/\\b\\d+\\b/);\n  return numericRoom ? numericRoom[0] : text;\n}\n\nfunction normalizeName(value) {\n  if (value === null || value === undefined || value === '') return null;\n  return String(value).trim().replace(/\\s+/g, ' ');\n}\n\nparsed.name = normalizeName(parsed.name);\nparsed.cnic = parsed.cnic ? String(parsed.cnic).trim().replace(/\\D/g, '') : null;\nparsed.room = normalizeRoom(parsed.room);\nparsed.residentKey = parsed.name && parsed.room ? `${parsed.name}|${parsed.room}` : '';\n\nlet senderPhone = null;\ntry { senderPhone = $('Edit Fields2').first().json.senderPhone; } catch (e) {}\nif (!senderPhone) {\n  try { senderPhone = $('Edit Fields').first().json.senderPhone; } catch (e) {}\n}\nparsed.senderPhone = senderPhone;\n\nreturn [{ json: parsed }];"
+        "jsCode": "const raw = $input.first().json.choices[0].message.content;\nconst cleaned = raw.replace(/```json|```/g, '').trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  parsed = { action: 'unknown', name: null, cnic: null, room: null, fee: null, rent_status: null, contact_number: null, address: null, job_student: null, university: null, company: null, security: null, rent_owner1: null, rent_owner2: null, notes: 'PARSE_ERROR', query_type: null, requested_field: null };\n}\n\nfunction normalizeRoom(value) {\n  if (value === null || value === undefined || value === '') return null;\n  const text = String(value).trim();\n  const numericRoom = text.match(/\\b\\d+\\b/);\n  return numericRoom ? numericRoom[0] : text;\n}\n\nfunction normalizeName(value) {\n  if (value === null || value === undefined || value === '') return null;\n  return String(value).trim().replace(/\\s+/g, ' ');\n}\n\nparsed.name = normalizeName(parsed.name);\nparsed.cnic = parsed.cnic ? String(parsed.cnic).trim().replace(/\\D/g, '') : null;\nparsed.room = normalizeRoom(parsed.room);\nparsed.residentKey = parsed.name && parsed.room ? `${parsed.name}|${parsed.room}` : '';\n\nlet senderPhone = null;\ntry { senderPhone = $('Edit Fields2').first().json.senderPhone; } catch (e) {}\nif (!senderPhone) {\n  try { senderPhone = $('Edit Fields').first().json.senderPhone; } catch (e) {}\n}\nparsed.senderPhone = senderPhone;\n\nreturn [{ json: parsed }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         752,
-        1616
+        736
       ],
-      "id": "d8d99a82-cd84-47d3-bc99-11cea1a783f8",
+      "id": "14ddf398-6389-4a06-9f9a-f94d248604d4",
       "name": "Code in JavaScript"
-    },
-    {
-      "parameters": {
-        "rules": {
-          "values": [
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "loose",
-                  "version": 3
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "new",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    },
-                    "id": "415c10f0-7aa3-4fad-bf94-cdb63c0695ca"
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "new"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "loose",
-                  "version": 3
-                },
-                "conditions": [
-                  {
-                    "id": "4b7fb34f-9772-40a9-8a9a-f69be091b911",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "update",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals",
-                      "name": "filter.operator.equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "update"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "loose",
-                  "version": 3
-                },
-                "conditions": [
-                  {
-                    "id": "69354b8d-b5d8-40c8-91b2-a52f7b0b1f6f",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "vacate",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals",
-                      "name": "filter.operator.equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "vacate"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "loose",
-                  "version": 3
-                },
-                "conditions": [
-                  {
-                    "id": "82e17ee2-d0e6-44c2-9372-ddb711b844ca",
-                    "leftValue": "={{ $json.action }}",
-                    "rightValue": "query",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals",
-                      "name": "filter.operator.equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "query"
-            }
-          ]
-        },
-        "looseTypeValidation": true,
-        "options": {}
-      },
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.4,
-      "position": [
-        960,
-        1904
-      ],
-      "id": "965177e3-284f-4695-b03e-9d4a84b16f39",
-      "name": "Switch"
     },
     {
       "parameters": {
@@ -184,10 +67,16 @@
             "Room no.": "={{ $json.room }}",
             "Contact no.": "={{ $json.contact_number }}",
             "Room Rent": "={{ $json.fee }}",
+            "Security": "={{ $json.security || \"\" }}",
             "Rent Status": "={{ $json.rent_status || \"Pending\" }}",
+            "JOB / Student": "={{ $json.job_student || \"\" }}",
+            "Personal Address": "={{ $json.address || \"\" }}",
             "Person's Status": "Active",
             "Last Updated": "={{ $now }}",
-            "Personal Address": "={{ $json.address || \"\" }}"
+            "University Name": "={{ $json.university || \"\" }}",
+            "Company Name": "={{ $json.company || \"\" }}",
+            "Rent Paid to Owner 1": "={{ $json.rent_owner1 || \"\" }}",
+            "Rent Paid to Owner 2": "={{ $json.rent_owner2 || \"\" }}"
           },
           "matchingColumns": [
             "Name",
@@ -251,6 +140,16 @@
               "canBeUsedToMatch": true
             },
             {
+              "id": "Security",
+              "displayName": "Security",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
               "id": "Rent Status",
               "displayName": "Rent Status",
               "required": false,
@@ -258,6 +157,56 @@
               "display": true,
               "type": "string",
               "canBeUsedToMatch": true
+            },
+            {
+              "id": "Rent Paid to Owner 1",
+              "displayName": "Rent Paid to Owner 1",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Rent Paid to Owner 2",
+              "displayName": "Rent Paid to Owner 2",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "JOB / Student",
+              "displayName": "JOB / Student",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "University Name",
+              "displayName": "University Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
             },
             {
               "id": "Personal Address",
@@ -296,9 +245,9 @@
       "typeVersion": 4.7,
       "position": [
         1200,
-        1520
+        640
       ],
-      "id": "e7a03098-854c-4368-8c8d-ae46f128b21a",
+      "id": "c383b04b-ec25-4d96-933c-c88017573500",
       "name": "Append or update row in sheet",
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -315,16 +264,16 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.senderPhone }}\",\n  \"text\": { \"body\": {{ JSON.stringify($json.replyMessage) }} }\n}",
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"to\": \"{{ $json.senderPhone }}\",\n  \"text\": {\n    \"body\": {{ JSON.stringify($json.replyMessage) }}\n  }\n}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
         2272,
-        1616
+        736
       ],
-      "id": "f54b7c31-2d1d-4803-8a94-9cc6dd61b233",
+      "id": "8fd9b05f-6541-4ffc-9333-673f996fb884",
       "name": "HTTP Request3",
       "credentials": {
         "httpBasicAuth": {
@@ -339,15 +288,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const c = $('Code in JavaScript').item.json;\nlet msg;\nif (c.action === 'new') {\n  const feeText = c.fee ? `, Rs ${c.fee}/mo` : '';\n  msg = `\u2705 Added: ${c.name}, Room ${c.room}${feeText}${c.cnic ? `, CNIC ${c.cnic}` : ''}`;\n} else if (c.action === 'update') {\n  msg = `\u2705 Updated: ${c.name}, Room ${c.room}`;\n} else if (c.action === 'vacate') {\n  msg = `\ud83d\udeaa Marked vacated: ${c.name}, Room ${c.room}`;\n} else {\n  msg = 'Saved.';\n}\nreturn [{ json: { replyMessage: msg, senderPhone: c.senderPhone } }];"
+        "jsCode": "const c = $('Code in JavaScript').item.json;\n\n// For update/vacate, get the merged record\n// so the reply reflects the complete saved resident data.\nlet saved = null;\n\ntry {\n  saved = $('Merge Fields').item.json;\n} catch (e) {\n  saved = null;\n}\n\nfunction value(v, fallback = 'not recorded') {\n  return v !== null && v !== undefined && String(v).trim() !== ''\n    ? String(v)\n    : fallback;\n}\n\nlet msg;\n\nif (c.action === 'new') {\n\n  const feeText = c.fee\n    ? `\\nRent: Rs ${c.fee}/month`\n    : '';\n\n  msg =\n`✅ Added successfully\n\nName: ${value(c.name)}\nRoom: ${value(c.room)}\nCNIC: ${value(c.cnic)}${feeText}`;\n\n} else if (c.action === 'update') {\n\n  const r = saved || c;\n\n  msg =\n`✅ Updated successfully\n\nName: ${value(r.name)}\nRoom: ${value(r.room)}\nCNIC: ${value(r.cnic)}\nRent: Rs ${value(r.fee)}\nRent Status: ${value(r.rent_status)}\nContact: ${value(r.contact_number)}\nAddress: ${value(r.address)}\nStatus: ${value(r.personStatus)}`;\n\n} else if (c.action === 'vacate') {\n\n  const r = saved || c;\n\n  msg =\n`🚪 Resident marked vacated\n\nName: ${value(r.name)}\nRoom: ${value(r.room)}\nCNIC: ${value(r.cnic)}\nRent: Rs ${value(r.fee)}\nRent Status: ${value(r.rent_status)}\nContact: ${value(r.contact_number)}\nAddress: ${value(r.address)}\nStatus: ${value(r.personStatus)}`;\n\n} else {\n\n  msg = 'Saved.';\n}\n\nreturn [{\n  json: {\n    replyMessage: msg,\n    senderPhone: c.senderPhone\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1552,
-        1600
+        720
       ],
-      "id": "adcf80a6-2593-427f-a2b7-2867001b0a52",
+      "id": "7beecbd6-e5da-42bf-812a-7156d5255184",
       "name": "Code in JavaScript1"
     },
     {
@@ -360,9 +309,9 @@
       "typeVersion": 2.1,
       "position": [
         -400,
-        992
+        112
       ],
-      "id": "2393fdb8-eb68-46b0-a099-026ec010a54a",
+      "id": "be3b969f-36ae-4ac5-b189-d41522d155de",
       "name": "Webhook1",
       "webhookId": "dd8a75eb-2c69-4025-b03d-f292b7c0d425"
     },
@@ -395,9 +344,9 @@
       "typeVersion": 2.3,
       "position": [
         -192,
-        992
+        112
       ],
-      "id": "0c2380e3-cb27-458d-b3e3-6ef8299e38c8",
+      "id": "474d5ef8-08aa-44f5-b740-1befebc19f07",
       "name": "If1"
     },
     {
@@ -412,9 +361,9 @@
       "typeVersion": 1.5,
       "position": [
         0,
-        880
+        0
       ],
-      "id": "635dcd54-ed70-48e4-95d4-e25cc1eea3b5",
+      "id": "aa67af4c-4aed-4770-9f19-0b935834512f",
       "name": "Respond to Webhook"
     },
     {
@@ -427,9 +376,9 @@
       "typeVersion": 1.5,
       "position": [
         0,
-        1104
+        224
       ],
-      "id": "5e07f33c-e3de-4408-a4eb-534a8d27867d",
+      "id": "631f9f53-7fdf-4383-ba8e-ee3da63bd4ef",
       "name": "Respond to Webhook1"
     },
     {
@@ -442,9 +391,9 @@
       "typeVersion": 2.1,
       "position": [
         -688,
-        1392
+        512
       ],
-      "id": "731b9614-f4fc-4bca-aef6-7db053e4c057",
+      "id": "61326a62-0c82-4716-9aa1-0e12da3d10ce",
       "name": "Webhook2",
       "webhookId": "08fb49f5-a083-4d43-a9ce-3822c2e1c6ed"
     },
@@ -478,9 +427,9 @@
       "typeVersion": 2.3,
       "position": [
         -48,
-        1376
+        496
       ],
-      "id": "9f289e67-093a-457e-9eae-018a1fa2cf07",
+      "id": "1849495b-ebe2-4e75-add4-821f80a1ddcd",
       "name": "If2"
     },
     {
@@ -507,9 +456,9 @@
       "typeVersion": 3.4,
       "position": [
         240,
-        1488
+        608
       ],
-      "id": "c55050a3-b906-4093-8d5c-308c2d9a70e3",
+      "id": "1ab78eab-f902-4c26-900e-e58f92f1aa6c",
       "name": "Edit Fields2"
     },
     {
@@ -523,9 +472,9 @@
       "typeVersion": 4.4,
       "position": [
         240,
-        1296
+        416
       ],
-      "id": "a6d265a6-b636-47ee-9d93-03b84c7aead9",
+      "id": "7d34441e-d540-494b-b56d-77d5c4027349",
       "name": "HTTP Request",
       "credentials": {
         "httpHeaderAuth": {
@@ -545,9 +494,9 @@
       "typeVersion": 4.4,
       "position": [
         448,
-        1296
+        416
       ],
-      "id": "b185b5a4-205a-4f85-a051-1d3a10a4f19a",
+      "id": "67392b09-c981-4a88-a8be-497dca2bf4a4",
       "name": "HTTP Request1",
       "credentials": {
         "httpHeaderAuth": {
@@ -583,9 +532,9 @@
       "typeVersion": 4.4,
       "position": [
         656,
-        1296
+        416
       ],
-      "id": "4f813cdd-5a3f-4773-aaf4-9b2b4dd87dec",
+      "id": "8abd3394-ae2d-4272-8916-bd2f2d76b485",
       "name": "HTTP Request4",
       "credentials": {
         "httpHeaderAuth": {
@@ -618,9 +567,9 @@
       "typeVersion": 3.4,
       "position": [
         864,
-        1296
+        416
       ],
-      "id": "a130faba-9083-4f9d-a66b-99579a1632eb",
+      "id": "fa1c58e8-16a9-4e0f-8edd-9191c8aad735",
       "name": "Edit Fields"
     },
     {
@@ -653,9 +602,9 @@
       "typeVersion": 4.7,
       "position": [
         1296,
-        1920
+        1040
       ],
-      "id": "e6824aba-97cd-4c9b-babb-f4c5b740cac9",
+      "id": "28f3e45e-86b6-4bfc-8b16-82799a1be95b",
       "name": "Get Resident Row",
       "alwaysOutputData": true,
       "credentials": {
@@ -667,15 +616,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const extracted = $('Code in JavaScript').item.json;\nconst rows = $input.all();\n\nfunction normalizeRoom(value) {\n  if (value === null || value === undefined || value === '') return null;\n  const text = String(value).trim();\n  const numericRoom = text.match(/\\b\\d+\\b/);\n  return numericRoom ? numericRoom[0] : text;\n}\n\nfunction normalizeName(value) {\n  if (value === null || value === undefined || value === '') return null;\n  return String(value).trim().replace(/\\s+/g, ' ').toLowerCase();\n}\n\nconst targetName = normalizeName(extracted.name);\nconst targetRoom = normalizeRoom(extracted.room);\n\n// Get Resident Row searches by name. Here we select the row whose room matches\n// after normalization, so values like \"Room 102\" or the typo \"Rome 102\"\n// still match an incoming room value of \"102\".\nconst existing = rows\n  .map(item => item.json)\n  .find(row => normalizeName(row['Name']) === targetName && normalizeRoom(row['Room no.']) === targetRoom);\n\nif (!existing) {\n  return [{ json: { notFound: true, name: extracted.name, room: extracted.room, action: extracted.action, senderPhone: extracted.senderPhone } }];\n}\n\nfunction pick(newVal, oldVal, fallback) {\n  if (newVal !== null && newVal !== undefined && newVal !== '') return newVal;\n  if (oldVal !== undefined && oldVal !== null && oldVal !== '') return oldVal;\n  return fallback;\n}\n\nconst canonicalName = pick(extracted.name, existing['Name'], extracted.name);\nconst canonicalRoom = normalizeRoom(pick(extracted.room, existing['Room no.'], extracted.room));\n\nconst merged = {\n  notFound: false,\n  senderPhone: extracted.senderPhone,\n  // Always write the canonical key so a legacy/malformed ResidentKey is repaired.\n  residentKey: canonicalName && canonicalRoom ? `${canonicalName}|${canonicalRoom}` : extracted.residentKey,\n  name: canonicalName,\n  room: canonicalRoom,\n  cnic: pick(extracted.cnic, existing['CNIC'], ''),\n  contact_number: pick(extracted.contact_number, existing['Contact no.'], ''),\n  fee: pick(extracted.fee, existing['Room Rent'], ''),\n  rent_status: pick(extracted.rent_status, existing['Rent Status'], 'Pending'),\n  address: pick(extracted.address, existing['Personal Address'], ''),\n  personStatus: existing[\"Person's Status\"] || 'Active'\n};\n\nif (extracted.action === 'vacate') {\n  merged.personStatus = 'Vacated';\n}\n\nreturn [{ json: merged }];"
+        "jsCode": "const extracted = $('Code in JavaScript').item.json;\nconst rows = $input.all();\n\nfunction normalizeRoom(value) {\n  if (value === null || value === undefined || value === '') return null;\n  const text = String(value).trim();\n  const numericRoom = text.match(/\\b\\d+\\b/);\n  return numericRoom ? numericRoom[0] : text;\n}\n\nfunction normalizeName(value) {\n  if (value === null || value === undefined || value === '') return null;\n  return String(value).trim().replace(/\\s+/g, ' ').toLowerCase();\n}\n\nconst targetName = normalizeName(extracted.name);\nconst targetRoom = normalizeRoom(extracted.room);\n\nconst nameMatches = rows\n  .map(item => item.json)\n  .filter(row => normalizeName(row['Name']) === targetName);\n\n// No resident with this name\nif (nameMatches.length === 0) {\n  return [{\n    json: {\n      notFound: true,\n      name: extracted.name,\n      room: extracted.room,\n      action: extracted.action,\n      senderPhone: extracted.senderPhone\n    }\n  }];\n}\n\n// Exactly one resident with this name\n// Room is NOT required — use the resident's canonical room.\nlet existing = null;\n\nif (nameMatches.length === 1) {\n  existing = nameMatches[0];\n}\n\n// Multiple residents with same name\n// Room is now required to identify the correct one.\nif (nameMatches.length > 1) {\n  if (!targetRoom) {\n    return [{\n      json: {\n        notFound: true,\n        ambiguous: true,\n        name: extracted.name,\n        room: null,\n        action: extracted.action,\n        senderPhone: extracted.senderPhone,\n        clarificationMessage:\n          `I found multiple residents named ${extracted.name}. Please include the room number so I know which resident you mean.`\n      }\n    }];\n  }\n\n  const roomMatches = nameMatches.filter(row =>\n    normalizeRoom(row['Room no.']) === targetRoom\n  );\n\n  if (roomMatches.length !== 1) {\n    return [{\n      json: {\n        notFound: true,\n        ambiguous: true,\n        name: extracted.name,\n        room: targetRoom,\n        action: extracted.action,\n        senderPhone: extracted.senderPhone,\n        clarificationMessage:\n          `I found multiple residents named ${extracted.name}, and I couldn't uniquely match Room ${targetRoom}. Please provide the correct room number.`\n      }\n    }];\n  }\n\n  existing = roomMatches[0];\n}\n\nfunction pick(newVal, oldVal, fallback) {\n  if (newVal !== null && newVal !== undefined && newVal !== '') {\n    return newVal;\n  }\n\n  if (oldVal !== undefined && oldVal !== null && oldVal !== '') {\n    return oldVal;\n  }\n\n  return fallback;\n}\n\nconst canonicalName = existing['Name'] || extracted.name;\n\nconst canonicalRoom = normalizeRoom(\n  existing['Room no.']\n);\n\nconst merged = {\n  notFound: false,\n  senderPhone: extracted.senderPhone,\n\n  residentKey:\n    canonicalName && canonicalRoom\n      ? `${canonicalName}|${canonicalRoom}`\n      : extracted.residentKey,\n\n  name: canonicalName,\n  room: canonicalRoom,\n\n  cnic: pick(extracted.cnic, existing['CNIC'], ''),\n  contact_number: pick(\n    extracted.contact_number,\n    existing['Contact no.'],\n    ''\n  ),\n  fee: pick(\n    extracted.fee,\n    existing['Room Rent'],\n    ''\n  ),\n  rent_status: pick(\n    extracted.rent_status,\n    existing['Rent Status'],\n    'Pending'\n  ),\n  address: pick(\n    extracted.address,\n    existing['Personal Address'],\n    ''\n  ),\n\n  personStatus:\n    existing[\"Person's Status\"] || 'Active',\n\n  // Keep the complete existing row available\n  existingRow: existing\n};\n\nif (extracted.action === 'vacate') {\n  merged.personStatus = 'Vacated';\n}\n\nreturn [{ json: merged }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1488,
-        1840
+        960
       ],
-      "id": "27113c2e-ba42-4048-ae30-007d8c5abaa5",
+      "id": "25a69d9a-351a-431b-a33e-f6614363514d",
       "name": "Merge Fields"
     },
     {
@@ -704,10 +653,16 @@
             "Room no.": "={{ $json.room }}",
             "Contact no.": "={{ $json.contact_number }}",
             "Room Rent": "={{ $json.fee }}",
+            "Security": "={{ $json.security || \"\" }}",
             "Rent Status": "={{ $json.rent_status }}",
+            "JOB / Student": "={{ $json.job_student || \"\" }}",
             "Personal Address": "={{ $json.address }}",
             "Person's Status": "={{ $json.personStatus }}",
-            "Last Updated": "={{ $now }}"
+            "Last Updated": "={{ $now }}",
+            "University Name": "={{ $json.university || \"\" }}",
+            "Company Name": "={{ $json.company || \"\" }}",
+            "Rent Paid to Owner 1": "={{ $json.rent_owner1 || \"\" }}",
+            "Rent Paid to Owner 2": "={{ $json.rent_owner2 || \"\" }}"
           },
           "matchingColumns": [
             "Name",
@@ -771,6 +726,16 @@
               "canBeUsedToMatch": true
             },
             {
+              "id": "Security",
+              "displayName": "Security",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
               "id": "Rent Status",
               "displayName": "Rent Status",
               "required": false,
@@ -778,6 +743,56 @@
               "display": true,
               "type": "string",
               "canBeUsedToMatch": true
+            },
+            {
+              "id": "Rent Paid to Owner 1",
+              "displayName": "Rent Paid to Owner 1",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Rent Paid to Owner 2",
+              "displayName": "Rent Paid to Owner 2",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "JOB / Student",
+              "displayName": "JOB / Student",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "University Name",
+              "displayName": "University Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Company Name",
+              "displayName": "Company Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
             },
             {
               "id": "Personal Address",
@@ -816,9 +831,9 @@
       "typeVersion": 4.7,
       "position": [
         1664,
-        1840
+        960
       ],
-      "id": "a0b64125-bc7e-4a78-9a8e-0f396372df52",
+      "id": "ebf6efde-b0c0-4c0f-935b-6ff15064ade7",
       "name": "Write Resident Row",
       "credentials": {
         "googleSheetsOAuth2Api": {
@@ -829,15 +844,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const p = $input.first().json;\nlet error = null;\nconst validActions = ['new', 'update', 'vacate', 'query'];\nconst validQueryTypes = ['resident_lookup', 'unpaid_list', 'total_income'];\n\nif (p.notes === 'PARSE_ERROR' || !validActions.includes(p.action)) {\n  error = \"Sorry, I couldn't understand that message. Try something like:\\n\u2022 'new student Ahmed room 101 rent 15000'\\n\u2022 'update Ahmed room 101 rent to 15000'\\n\u2022 'Ahmed room 101 left'\";\n} else if (p.action === 'new' && (!p.name || !p.room)) {\n  error = \"To add a new resident I need both a name and room number, e.g. 'new student Ahmed room 101 rent 15000'.\";\n} else if (p.cnic && !/^\\d{13}$/.test(String(p.cnic))) {\n  error = \"The CNIC should contain 13 digits. You can send it with or without dashes, for example 35202-1234567-1.\";\n} else if ((p.action === 'update' || p.action === 'vacate') && (!p.name || !p.room)) {\n  const missing = [];\n  if (!p.name) missing.push('name');\n  if (!p.room) missing.push('room number');\n  error = `I need the resident's ${missing.join(' and ')} to do that. Try: 'update Ahmed room 101 rent to 15000'.`;\n} else if (p.action === 'query') {\n  if (!validQueryTypes.includes(p.query_type)) {\n    error = \"I couldn't identify the lookup or report you want. Try: 'What room is Ahmed Khan in?', 'Who hasn't paid rent?', or 'What is the total rent income?'\";\n  } else if (p.query_type === 'resident_lookup' && !p.name) {\n    error = \"I need the resident's name for that lookup. Try: 'What room is Ahmed Khan in?'\";\n  }\n}\n\nreturn [{ json: { ...p, validationError: error } }];"
+        "jsCode": "const p = $input.first().json;\n\nlet error = null;\n\nconst validActions = ['new', 'update', 'vacate', 'query', 'pdf'];\nconst validQueryTypes = [\n  'resident_lookup',\n  'unpaid_list',\n  'total_income'\n];\n\n// --------------------------------------------------\n// BASIC ACTION VALIDATION\n// --------------------------------------------------\nif (p.notes === 'PARSE_ERROR' || !validActions.includes(p.action)) {\n\n  error =\n    \"Sorry, I couldn't understand that message. Try something like:\\n\" +\n    \"• 'new student Ahmed room 101 rent 15000'\\n\" +\n    \"• 'update Ahmed room 101 rent to 15000'\\n\" +\n    \"• 'Ahmed room 101 left'\";\n\n\n// --------------------------------------------------\n// PDF\n// --------------------------------------------------\n} else if (p.action === 'pdf') {\n\n  // PDF does not require resident information.\n  error = null;\n\n\n// --------------------------------------------------\n// NEW RESIDENT\n// --------------------------------------------------\n} else if (p.action === 'new' && (!p.name || !p.room)) {\n\n  // A NEW resident still requires BOTH name and room.\n  error =\n    \"To add a new resident I need both a name and room number, \" +\n    \"e.g. 'new student Ahmed room 101 rent 15000'.\";\n\n\n// --------------------------------------------------\n// CNIC VALIDATION\n// --------------------------------------------------\n} else if (\n  p.cnic &&\n  !/^\\d{13}$/.test(String(p.cnic))\n) {\n\n  error =\n    \"The CNIC should contain 13 digits. You can send it with or without dashes, \" +\n    \"for example 35202-1234567-1.\";\n\n\n// --------------------------------------------------\n// UPDATE / VACATE\n// --------------------------------------------------\n} else if (\n  (p.action === 'update' || p.action === 'vacate') &&\n  !p.name\n) {\n\n  // IMPORTANT:\n  // Room is NOT required here.\n  //\n  // If there is exactly one resident with this name,\n  // the downstream resident-matching logic can use that\n  // resident's existing room from Google Sheets.\n  //\n  // If multiple residents have the same name, the\n  // matching logic can request the room for clarification.\n\n  error =\n    \"I need the resident's name to do that. \" +\n    \"For example: 'Saleem ka rent 5500 kar do'.\";\n\n\n// --------------------------------------------------\n// QUERY\n// --------------------------------------------------\n} else if (p.action === 'query') {\n\n  if (!validQueryTypes.includes(p.query_type)) {\n\n    error =\n      \"I couldn't identify the lookup or report you want. \" +\n      \"Try: 'What room is Ahmed Khan in?', \" +\n      \"'Who hasn't paid rent?', or \" +\n      \"'What is the total rent income?'.\";\n\n  } else if (\n    p.query_type === 'resident_lookup' &&\n    !p.name\n  ) {\n\n    error =\n      \"I need the resident's name for that lookup. \" +\n      \"Try: 'What room is Ahmed Khan in?'\";\n  }\n}\n\n\n// --------------------------------------------------\n// RETURN\n// --------------------------------------------------\nreturn [\n  {\n    json: {\n      ...p,\n      validationError: error\n    }\n  }\n];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         992,
-        1488
+        608
       ],
-      "id": "7c404a57-e9d7-432d-aeff-e58fd61f816b",
+      "id": "48ad3d07-a6ee-4f57-ad35-ce57e6ca63f9",
       "name": "Validate Message"
     },
     {
@@ -870,9 +885,9 @@
       "typeVersion": 2.3,
       "position": [
         1360,
-        1024
+        144
       ],
-      "id": "11bf0d84-dd20-4f03-8133-81b9bd625d20",
+      "id": "f285e851-0146-4630-a7fd-ea48c7a3bfea",
       "name": "Has Validation Error?"
     },
     {
@@ -883,9 +898,9 @@
       "typeVersion": 2,
       "position": [
         1328,
-        1344
+        464
       ],
-      "id": "b9cb73f9-6147-485a-9ef0-45d2f3799764",
+      "id": "5355b8f7-dcd8-4a3b-8a34-f199198d768f",
       "name": "Validation Error Reply"
     },
     {
@@ -917,23 +932,23 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1664,
-        1840
+        1968,
+        1360
       ],
-      "id": "81878966-ebf8-40e5-b8a2-450c65563f26",
+      "id": "30afe6ec-0652-4162-89b6-3bbf4507070e",
       "name": "Resident Found?"
     },
     {
       "parameters": {
-        "jsCode": "const c = $input.first().json;\nconst msg = `\u26a0\ufe0f I couldn't find a resident named \"${c.name || '?'}\" in room ${c.room || '?'}. If this is a new resident, try: 'new student ${c.name || 'Name'} room ${c.room || '101'} rent 15000'. If they should already exist, please double check the spelling of the name and room.`;\nreturn [{ json: { replyMessage: msg, senderPhone: c.senderPhone } }];"
+        "jsCode": "const c = $input.first().json;\nconst msg = `⚠️ I couldn't find a resident named \"${c.name || '?'}\" in room ${c.room || '?'}. If this is a new resident, try: 'new student ${c.name || 'Name'} room ${c.room || '101'} rent 15000'. If they should already exist, please double check the spelling of the name and room.`;\nreturn [{ json: { replyMessage: msg, senderPhone: c.senderPhone } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         2112,
-        1904
+        1024
       ],
-      "id": "9601b2b7-aaea-4cd8-8890-57794ff0fb2f",
+      "id": "ad74a203-da94-42bd-9f29-9f3264289f47",
       "name": "Resident Not Found Reply"
     },
     {
@@ -966,9 +981,9 @@
       "typeVersion": 2.3,
       "position": [
         -416,
-        1392
+        512
       ],
-      "id": "d9d1da12-9f67-4158-a1d4-f885a3c42f89",
+      "id": "0dfd03e3-45cf-4586-860b-d71cf755e6bc",
       "name": "Has Message"
     },
     {
@@ -977,9 +992,9 @@
       "typeVersion": 1,
       "position": [
         -400,
-        1632
+        752
       ],
-      "id": "ba0dc393-2131-42b9-b0b2-59dc4f1a8165",
+      "id": "7bdb4f53-b134-4982-8f3e-71be574497a4",
       "name": "No Operation, do nothing"
     },
     {
@@ -1004,9 +1019,9 @@
       "typeVersion": 4.7,
       "position": [
         1168,
-        2192
+        1312
       ],
-      "id": "3ba182e8-71f3-4f95-afb8-d1542b2dc51d",
+      "id": "8494baa3-60ab-4ed2-94df-40f2cfa5ca4c",
       "name": "Query - Get All Residents",
       "alwaysOutputData": true,
       "credentials": {
@@ -1018,15 +1033,15 @@
     },
     {
       "parameters": {
-        "jsCode": "const query = $('Code in JavaScript').item.json;\nconst rows = $input.all().map(item => item.json || {});\n\nfunction norm(value) {\n  return String(value ?? '').trim().replace(/\\s+/g, ' ').toLowerCase();\n}\n\nfunction room(value) {\n  const text = String(value ?? '').trim();\n  const m = text.match(/\\b\\d+\\b/);\n  return m ? m[0] : text;\n}\n\nfunction money(value) {\n  const n = Number(String(value ?? '').replace(/[^0-9.\\-]/g, ''));\n  return Number.isFinite(n) ? n : 0;\n}\n\nconst activeRows = rows.filter(r => norm(r[\"Person's Status\"]) !== 'vacated');\nlet reply;\n\nif (query.query_type === 'resident_lookup') {\n  const target = norm(query.name);\n  const matches = rows.filter(r => norm(r['Name']) === target);\n\n  if (!matches.length) {\n    reply = `\u26a0\ufe0f I couldn't find a resident named \"${query.name || '?'}\" in the hostel records.`;\n  } else if (matches.length > 1) {\n    const list = matches.map(r => {\n      const n = r['Name'] || query.name;\n      const rm = room(r['Room no.']) || '?';\n      const cnic = r['CNIC'] || '?';\n      const rent = r['Room Rent'] || '?';\n      const status = r['Rent Status'] || '?';\n      return `${n} \u2014 Room ${rm}, CNIC ${cnic}, Rent Rs ${rent}, Status ${status}`;\n    }).join('\\n');\n    reply = `I found multiple records for ${query.name}:\\n${list}\\nPlease include the room number if you want a specific record.`;\n  } else {\n    const r = matches[0];\n    const requested = query.requested_field || 'all';\n    const name = r['Name'] || query.name;\n    const rm = room(r['Room no.']) || '?';\n\n    if (requested === 'room') {\n      reply = `${name} is in Room ${rm}.`;\n    } else if (requested === 'rent') {\n      reply = `${name}'s rent is Rs ${r['Room Rent'] || 0}/month.`;\n    } else if (requested === 'rent_status') {\n      reply = `${name}'s rent status is ${r['Rent Status'] || 'Unknown'}.`;\n    } else if (requested === 'contact_number') {\n      reply = `${name}'s contact number is ${r['Contact no.'] || 'not recorded'}.`;\n    } else if (requested === 'address') {\n      reply = `${name}'s address is ${r['Personal Address'] || 'not recorded'}.`;\n    } else if (requested === 'cnic') {\n      reply = `${name}'s CNIC is ${r['CNIC'] || 'not recorded'}.`;\n    } else {\n      reply = `\ud83d\udccb ${name}\\nRoom: ${rm}\\nCNIC: ${r['CNIC'] || 'not recorded'}\\nRent: Rs ${r['Room Rent'] || 0}/month\\nRent status: ${r['Rent Status'] || 'Unknown'}\\nContact: ${r['Contact no.'] || 'not recorded'}\\nAddress: ${r['Personal Address'] || 'not recorded'}\\nStatus: ${r[\"Person's Status\"] || 'Active'}`;\n    }\n  }\n} else if (query.query_type === 'unpaid_list') {\n  const unpaid = activeRows.filter(r => norm(r['Rent Status']) !== 'paid');\n  if (!unpaid.length) {\n    reply = '\u2705 All active residents have paid their rent.';\n  } else {\n    const lines = unpaid.map((r, i) => `${i + 1}. ${r['Name'] || 'Unknown'} \u2014 Room ${room(r['Room no.']) || '?'} \u2014 Rs ${r['Room Rent'] || 0}`);\n    reply = `\ud83d\udcb0 Residents with unpaid/pending rent (${unpaid.length}):\\n${lines.join('\\n')}`;\n  }\n} else if (query.query_type === 'total_income') {\n  const total = activeRows.reduce((sum, r) => sum + money(r['Room Rent']), 0);\n  reply = `\ud83d\udcb0 Total monthly rent income from active residents: Rs ${total.toLocaleString('en-PK')}.`;\n} else {\n  reply = \"I couldn't determine which report you want.\";\n}\n\nreturn [{ json: { replyMessage: reply, senderPhone: query.senderPhone } }];"
+        "jsCode": "const query = $('Code in JavaScript').item.json;\nconst rows = $input.all().map(item => item.json || {});\n\nfunction norm(value) {\n  return String(value ?? '').trim().replace(/\\s+/g, ' ').toLowerCase();\n}\n\nfunction room(value) {\n  const text = String(value ?? '').trim();\n  const m = text.match(/\\b\\d+\\b/);\n  return m ? m[0] : text;\n}\n\nfunction money(value) {\n  const n = Number(String(value ?? '').replace(/[^0-9.\\-]/g, ''));\n  return Number.isFinite(n) ? n : 0;\n}\n\nconst activeRows = rows.filter(r => norm(r[\"Person's Status\"]) !== 'vacated');\nlet reply;\n\nif (query.query_type === 'resident_lookup') {\n  const target = norm(query.name);\n  const matches = rows.filter(r => norm(r['Name']) === target);\n\n  if (!matches.length) {\n    reply = `⚠️ I couldn't find a resident named \"${query.name || '?'}\" in the hostel records.`;\n  } else if (matches.length > 1) {\n    const list = matches.map(r => {\n      const n = r['Name'] || query.name;\n      const rm = room(r['Room no.']) || '?';\n      const cnic = r['CNIC'] || '?';\n      const rent = r['Room Rent'] || '?';\n      const status = r['Rent Status'] || '?';\n      return `${n} — Room ${rm}, CNIC ${cnic}, Rent Rs ${rent}, Status ${status}`;\n    }).join('\\n');\n    reply = `I found multiple records for ${query.name}:\\n${list}\\nPlease include the room number if you want a specific record.`;\n  } else {\n    const r = matches[0];\n    const requested = query.requested_field || 'all';\n    const name = r['Name'] || query.name;\n    const rm = room(r['Room no.']) || '?';\n\n    if (requested === 'room') {\n      reply = `${name} is in Room ${rm}.`;\n    } else if (requested === 'rent') {\n      reply = `${name}'s rent is Rs ${r['Room Rent'] || 0}/month.`;\n    } else if (requested === 'rent_status') {\n      reply = `${name}'s rent status is ${r['Rent Status'] || 'Unknown'}.`;\n    } else if (requested === 'contact_number') {\n      reply = `${name}'s contact number is ${r['Contact no.'] || 'not recorded'}.`;\n    } else if (requested === 'address') {\n      reply = `${name}'s address is ${r['Personal Address'] || 'not recorded'}.`;\n    } else if (requested === 'cnic') {\n      reply = `${name}'s CNIC is ${r['CNIC'] || 'not recorded'}.`;\n    } else if (requested === 'security') {\n      reply = `${name}'s security is Rs ${r['Security'] || 0}.`;\n    } else if (requested === 'university') {\n      reply = `${name}'s university is ${r['University'] || 'not recorded'}.`;\n    } else if (requested === 'company') {\n      reply = `${name}'s company is ${r['Company'] || 'not recorded'}.`;\n    } else if (requested === 'job_student') {\n      reply = `${name} is recorded as ${r['JOB / Student'] || 'not recorded'}.`;\n    } else if (requested === 'rent_owner1') {\n      reply = `${name}'s rent paid to Owner 1 is Rs ${r['Rent paid to Owner 1'] || 0}.`;\n    } else if (requested === 'rent_owner2') {\n      reply = `${name}'s rent paid to Owner 2 is Rs ${r['Rent paid to Owner 2'] || 0}.`;\n    } else {\n      reply = `📋 ${name}\\nRoom: ${rm}\\nCNIC: ${r['CNIC'] || 'not recorded'}\\nRent: Rs ${r['Room Rent'] || 0}/month\\nRent status: ${r['Rent Status'] || 'Unknown'}\\nContact: ${r['Contact no.'] || 'not recorded'}\\nAddress: ${r['Personal Address'] || 'not recorded'}\\nSecurity: Rs ${r['Security'] || 0}\\nJob/Student: ${r['JOB / Student'] || 'not recorded'}\\nUniversity: ${r['University'] || 'not recorded'}\\nCompany: ${r['Company'] || 'not recorded'}\\nOwner 1 Rent: Rs ${r['Rent paid to Owner 1'] || 0}\\nOwner 2 Rent: Rs ${r['Rent paid to Owner 2'] || 0}\\nStatus: ${r[\"Person's Status\"] || 'Active'}`;\n    }\n  }\n} else if (query.query_type === 'unpaid_list') {\n  const unpaid = activeRows.filter(r => norm(r['Rent Status']) !== 'paid');\n  if (!unpaid.length) {\n    reply = '✅ All active residents have paid their rent.';\n  } else {\n    const lines = unpaid.map((r, i) => `${i + 1}. ${r['Name'] || 'Unknown'} — Room ${room(r['Room no.']) || '?'} — Rs ${r['Room Rent'] || 0}`);\n    reply = `💰 Residents with unpaid/pending rent (${unpaid.length}):\\n${lines.join('\\n')}`;\n  }\n} else if (query.query_type === 'total_income') {\n  const total = activeRows.reduce((sum, r) => sum + money(r['Room Rent']), 0);\n  reply = `💰 Total monthly rent income from active residents: Rs ${total.toLocaleString('en-PK')}.`;\n} else {\n  reply = \"I couldn't determine which report you want.\";\n}\n\nreturn [{ json: { replyMessage: reply, senderPhone: query.senderPhone } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1440,
-        2192
+        1312
       ],
-      "id": "fc757093-69b7-4d9c-9214-2ed2b539192c",
+      "id": "12d25f48-a9ca-450c-8834-29cac6269d99",
       "name": "Process Query"
     },
     {
@@ -1050,10 +1065,10 @@
       "type": "n8n-nodes-base.googleSheets",
       "typeVersion": 4.7,
       "position": [
-        1168,
-        1504
+        1072,
+        880
       ],
-      "id": "cb2393ec-e488-4871-b281-1533e48c2d76",
+      "id": "3be2ac5c-e8b6-4acc-b4ce-5618daf73834",
       "name": "New Resident - Get All Rows",
       "alwaysOutputData": true,
       "credentials": {
@@ -1069,11 +1084,11 @@
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "id": "a468cc31-d637-4c9e-9051-9f905d6ffeb0",
+      "id": "3e9a21c0-1361-47ed-9737-46dfaa42470f",
       "name": "Check New Resident",
       "position": [
         1360,
-        1504
+        624
       ]
     },
     {
@@ -1103,25 +1118,209 @@
       },
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "id": "b08d9833-6788-4d2f-a11a-6f6e10096202",
+      "id": "ed6b00db-2a66-456a-9e14-1ec2c4769cd9",
       "name": "New Resident Allowed?",
       "position": [
-        1552,
-        1504
+        1728,
+        352
       ]
     },
     {
       "parameters": {
-        "jsCode": "const c = $input.first().json;\nlet msg;\nif (c.conflictType === 'room') msg = `\u26a0\ufe0f Room ${c.room} is already occupied by ${c.conflictName || 'another resident'}. I did not add ${c.name}. Please choose an available room.`;\nelse if (c.conflictType === 'cnic') msg = `\u26a0\ufe0f This CNIC is already registered${c.conflictName ? ` to ${c.conflictName}` : ''}${c.conflictRoom ? ` in room ${c.conflictRoom}` : ''}. I did not create a duplicate resident.`;\nelse msg = '\u26a0\ufe0f I could not add the resident because the request conflicts with existing resident data.';\nreturn [{ json: { replyMessage: msg, senderPhone: c.senderPhone } }];"
+        "jsCode": "const c = $input.first().json;\nlet msg;\nif (c.conflictType === 'room') msg = `⚠️ Room ${c.room} is already occupied by ${c.conflictName || 'another resident'}. I did not add ${c.name}. Please choose an available room.`;\nelse if (c.conflictType === 'cnic') msg = `⚠️ This CNIC is already registered${c.conflictName ? ` to ${c.conflictName}` : ''}${c.conflictRoom ? ` in room ${c.conflictRoom}` : ''}. I did not create a duplicate resident.`;\nelse msg = '⚠️ I could not add the resident because the request conflicts with existing resident data.';\nreturn [{ json: { replyMessage: msg, senderPhone: c.senderPhone } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "id": "5e38a7af-8203-4f32-91c6-f21c714940bf",
+      "id": "162f0820-aa43-49e2-9666-dc4a92943ecf",
       "name": "New Resident Conflict Reply",
       "position": [
         1744,
-        1600
+        720
       ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "RlGQtxRc1JfyiL9k",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/RlGQtxRc1JfyiL9k",
+          "cachedResultName": "HOSTEL MANAGER - PDF REPORT Generator"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "senderPhone": "={{ $json.senderPhone }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "senderPhone",
+              "displayName": "senderPhone",
+              "required": true,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        960,
+        1648
+      ],
+      "id": "a90937a8-169c-45a4-b29d-dbbb51fdab98",
+      "name": "Generate PDF Report"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "new",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "cf912c19-e3cc-4381-9dd6-5019c90d3af7"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "new"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "update",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    },
+                    "id": "648837ca-1043-47b0-aec3-e978140a2ce1"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "update"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "vacate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    },
+                    "id": "385feea8-a00f-486a-adf4-aed61936ec07"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "vacate"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "query",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    },
+                    "id": "3a6b7519-3741-4645-b4f4-13706276a6cb"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "query"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d4a5ce1b-2996-40e2-800f-106aec8d6e3c"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "pdf"
+            }
+          ]
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        800
+      ],
+      "id": "fd10f734-1877-460f-926d-5a58022a89b1",
+      "name": "Switch"
     }
   ],
   "pinData": {},
@@ -1142,38 +1341,6 @@
         [
           {
             "node": "Validate Message",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Switch": {
-      "main": [
-        [
-          {
-            "node": "New Resident - Get All Rows",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Get Resident Row",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Get Resident Row",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Query - Get All Residents",
             "type": "main",
             "index": 0
           }
@@ -1507,6 +1674,45 @@
           }
         ]
       ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "New Resident - Get All Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Resident Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Resident Row",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Query - Get All Residents",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate PDF Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": true,
@@ -1515,11 +1721,11 @@
     "binaryMode": "separate",
     "availableInMCP": false
   },
-  "versionId": "456120a3-efcf-4a8a-ac7f-b15c64dae9a7",
+  "versionId": "6244b08f-0a4f-4d64-b62b-8337e4acbc3a",
   "meta": {
     "instanceId": "3d1ab68caaecddc00870d7c84e1eb5a9f8e481132996e2ac799c4a83a5c42263"
   },
   "nodeGroups": [],
-  "id": "MhAVYEj5rQNnEpp5",
+  "id": "WAZddji3sIrchWCs",
   "tags": []
 }
